@@ -1,7 +1,7 @@
 # Install dependencies
 ```$ npm install```
 # Running server
-```$ node app.js```
+```$ node index.js```
 - The server listens at port 3000
 # APIs
 #### Product model
