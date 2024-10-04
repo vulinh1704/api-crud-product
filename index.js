@@ -58,7 +58,8 @@ app.post("/products", (req, res) => {
         name: req.body.name,
         description: req.body.description,
         price: req.body.price,
-        stock: req.body.stock
+        stock: req.body.stock,
+        img: req.body.img
     };
     products.push(product);
     res.json(product);
@@ -86,6 +87,7 @@ app.put("/products/:id", (req, res) => {
         product.description = req.body.description;
         product.price = req.body.price;
         product.stock = req.body.stock;
+        product.img = req.body.img;
         res.json(product);
     } else {
         res.status(404).json({ message: 'Not found' });
