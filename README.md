@@ -29,7 +29,7 @@
 ## APIs Users
 #### Register API
 ```POST http://localhost:3000/register```
-     {
+    {
         username: "linh1704",
         password: 'vulinh',
     }
