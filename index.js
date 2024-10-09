@@ -1,14 +1,18 @@
 const express = require("express");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const helmet = require("helmet");
+const cors = require("cors");
+
 const app = express();
-const cors = require('cors');
 app.use(cors());
 app.use(express.json());
+app.use(helmet());
 
-app.listen(3000, () => {
-    console.log("Server running on port 3000");
-});
+const SECRET_KEY = "MY_TOKEN"; // Store this securely in an environment variable in a real app
 
-const products = [
+let users = [];
+let products = [
     {
         id: 1,
         name: 'Bánh mì',
@@ -35,13 +39,58 @@ const products = [
     }
 ];
 
-// Get all products
-app.get("/products", (req, res) => {
+// Middleware to verify JWT
+function authenticateToken(req, res, next) {
+    const token = req.headers['authorization'];
+    if (!token) return res.status(401).json({ message: "Access denied" });
+
+    jwt.verify(token.split(" ")[1], SECRET_KEY, (err, user) => {
+        if (err) return res.status(403).json({ message: "Invalid token" });
+        req.user = user;
+        next();
+    });
+}
+
+// Register user
+app.post("/register", async (req, res) => {
+    const { username, password } = req.body;
+    const userExists = users.find(u => u.username === username);
+
+    if (userExists) {
+        return res.status(400).json({ message: "User already exists" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newUser = { id: Date.now(), username, password: hashedPassword };
+    users.push(newUser);
+    res.json({ message: "User registered successfully" });
+});
+
+// Login user
+app.post("/login", async (req, res) => {
+    const { username, password } = req.body;
+    const user = users.find(u => u.username === username);
+
+    if (!user) {
+        return res.status(400).json({ message: "Invalid username or password" });
+    }
+
+    const validPassword = await bcrypt.compare(password, user.password);
+    if (!validPassword) {
+        return res.status(400).json({ message: "Invalid username or password" });
+    }
+
+    const token = jwt.sign({ id: user.id, username: user.username }, SECRET_KEY, { expiresIn: "1h" });
+    res.json({ token });
+});
+
+// Get all products (protected)
+app.get("/products", authenticateToken, (req, res) => {
     res.json(products);
 });
 
-// Get a product by ID
-app.get("/products/:id", (req, res) => {
+// Get a product by ID (protected)
+app.get("/products/:id", authenticateToken, (req, res) => {
     const id = +req.params.id;
     const index = findProductIndex(id);
     if (index !== -1) {
@@ -51,10 +100,10 @@ app.get("/products/:id", (req, res) => {
     }
 });
 
-// Add a new product
-app.post("/products", (req, res) => {
+// Add a new product (protected)
+app.post("/products", authenticateToken, (req, res) => {
     const product = {
-        id: (new Date()).getTime(),
+        id: Date.now(),
         name: req.body.name,
         description: req.body.description,
         price: req.body.price,
@@ -65,8 +114,8 @@ app.post("/products", (req, res) => {
     res.json(product);
 });
 
-// Delete a product
-app.delete("/products/:id", (req, res) => {
+// Delete a product (protected)
+app.delete("/products/:id", authenticateToken, (req, res) => {
     const id = +req.params.id;
     const index = findProductIndex(id);
     if (index !== -1) {
@@ -77,8 +126,8 @@ app.delete("/products/:id", (req, res) => {
     }
 });
 
-// Update a product
-app.put("/products/:id", (req, res) => {
+// Update a product (protected)
+app.put("/products/:id", authenticateToken, (req, res) => {
     const id = +req.params.id;
     const index = findProductIndex(id);
     if (index !== -1) {
@@ -96,10 +145,59 @@ app.put("/products/:id", (req, res) => {
 
 // Helper function to find a product by ID
 function findProductIndex(id) {
-    for (let i = 0; i < products.length; i++) {
-        if (products[i].id === id) {
-            return i;
-        }
-    }
-    return -1;
+    return products.findIndex(product => product.id === id);
 }
+
+app.listen(3000, () => {
+    console.log("Server running on port 3000");
+});
+
+// Get user info (protected)
+app.get("/get-info", authenticateToken, (req, res) => {
+    
+    const userId = req.user.id;
+    
+    const user = users.find(u => u.id === userId);
+    
+    if (!user) {
+        return res.status(404).json({ message: "User not found" });
+    }
+    
+    res.json({
+        id: user.id,
+        username: user.username,
+        age: user.age,
+        image: user.image,
+        description: user.description
+    });
+});
+
+
+
+// Update user info (protected)
+app.put("/update-profile", authenticateToken, (req, res) => {
+    const userId = req.user.id;
+    const user = users.find(u => u.id === userId);
+
+    if (!user) {
+        return res.status(404).json({ message: "User not found" });
+    }
+
+    // Update allowed fields
+    const { age, image, description } = req.body;
+    
+    if (age) user.age = age;
+    if (image) user.image = image;
+    if (description) user.description = description;
+
+    res.json({
+        message: "User profile updated successfully",
+        user: {
+            id: user.id,
+            username: user.username,
+            age: user.age,
+            image: user.image,
+            description: user.description
+        }
+    });
+});
